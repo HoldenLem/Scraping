@@ -101,6 +101,11 @@ public class MainPageScraper {
             data.put("organization_logo", logoUrl);
             data.put("tags", String.join(", ", tags));
             allJobsData.add(data);
+            String orgUrl = item.locator("a[data-testid='link']").getAttribute("href");
+            if (orgUrl != null && !orgUrl.startsWith("http")) {
+                orgUrl = "https://jobs.techstars.com" + orgUrl;
+            }
+            data.put("organization_url", orgUrl);
 
 
             jobPage.close();
@@ -135,7 +140,7 @@ public class MainPageScraper {
     private void scrollToBottom(Page page) {
         page.waitForSelector("div[data-testid='job-list-item']");
         page.mouse().wheel(0, 3000);
-        page.waitForTimeout(100);
+        page.waitForTimeout(1000);
 
         int previousCount = -1, sameCountTimes = 0;
 
