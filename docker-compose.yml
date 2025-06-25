@@ -1,8 +1,6 @@
-# docker-compose.yml
 version: "3.8"
 
 services:
-
   db:
     image: postgres:14.11
     environment:
@@ -12,7 +10,11 @@ services:
     ports:
       - "5432:5432"
     volumes:
-        - ./pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  pgdata:
 
 
 
