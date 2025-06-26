@@ -3,7 +3,6 @@ package obs.techstars.Scraping.scraping;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.microsoft.playwright.*;
 import com.microsoft.playwright.options.WaitUntilState;
-import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,16 +21,14 @@ import java.util.Map;
 public class MainPageScraper {
     @Autowired
     private JobDetailScraper jobDetailScraper;
-    private Browser browser;
+
     private static final String BASE_URL = "https://jobs.techstars.com/jobs";
 
-    @PostConstruct
-    public void init() {
-        Playwright playwright = Playwright.create();
-        browser = playwright.chromium().launch(
-                new BrowserType.LaunchOptions().setHeadless(false)
-        );
-    }
+    private final Playwright playwright = Playwright.create();
+    private final Browser browser = playwright.chromium().launch(
+            new BrowserType.LaunchOptions().setHeadless(false)
+    );
+    private final Page mainPage = browser.newPage();
 
 
     private void acceptCookiesIfPresent(Page page) {
@@ -44,22 +41,19 @@ public class MainPageScraper {
         }
     }
 
-    public void scrapeJobFunction() {
-        final Page page = browser.newPage();
+    public List<String> scrapeJobFunction() {
 
-        page.navigate("https://jobs.techstars.com/jobs");
-        acceptCookiesIfPresent(page);
-        Locator jobFunction = page.locator("div[data-testid='filter-option-item-0'] >> text=Job function");
+        mainPage.navigate("https://jobs.techstars.com/jobs");
+        acceptCookiesIfPresent(mainPage);
+        Locator jobFunction = mainPage.locator("div[data-testid='filter-option-item-0'] >> text=Job function");
         jobFunction.click();
-        page.locator("div[data-testid='job_functions-Administration']").click();
-
-        //TODO: save the job ещ functions to retrive later
-        page.locator("div[data-testid^='job_functions-']")
-                .allInnerTexts()
-                .forEach(System.out::println);
+        mainPage.locator("div[data-testid='job_functions-Administration']").click();
+        List<String> result = mainPage.locator("div[data-testid^='job_functions-']").allInnerTexts();
+        mainPage.close();
+        return result;
     }
 
-    public void getJobListingsBy(String jobFunction) {
+    public List<Map<String, String>> getJobListingsBy(String jobFunction) {
         final Page page = browser.newPage();
         page.navigate(BASE_URL);
         page.waitForTimeout(100);
@@ -72,14 +66,16 @@ public class MainPageScraper {
         Locator jobItems = page.locator("div[data-testid='job-list-item']");
         int count = jobItems.count();
         List<Map<String, String>> allJobsData = new ArrayList<>();
-        for (int i = 0; i < count; i++) {
+        for (int i = 0; i < count/4; i++) {
             Locator item = jobItems.nth(i);
             Locator link = item.locator("a[data-testid='read-more']");
             String jobUrl = link.getAttribute("href");
             jobUrl = "https://jobs.techstars.com" + jobUrl;
 
-            if (!jobUrl.startsWith("https://jobs.techstars.com/companies/")) {
-                log.info("Skipping non-company job URL: {}", jobUrl);
+
+            if (!jobUrl.startsWith("https://jobs.techstars.com/companies/") ||
+                    jobUrl.contains("luca-2-0476fac0-8ce1-437e-9307-3732365e8dee") || jobUrl.contains("revolute-robotics")) {
+                log.info("Skipping job URL: {}", jobUrl);
                 continue;
             }
             log.info("Processing job URL: {}", jobUrl);
@@ -112,6 +108,7 @@ public class MainPageScraper {
         }
         saveJobDetailsToFile(allJobsData, "job-details.json");
         browser.close();
+        return allJobsData;
     }
 
 
@@ -130,12 +127,30 @@ public class MainPageScraper {
         Locator jobFunctionFilter = page.locator("div[data-testid='filter-option-item-0'] >> text=Job function");
         jobFunctionFilter.click();
 
-        String selector = String.format("div[data-testid='job_functions-%s']", jobFunction);
-        page.locator(selector).click();
-        Locator option = page.locator(selector);
-        option.click();
+        Locator scroller = page.locator("div[data-test-id='virtuoso-scroller']");
+
+        int maxScrolls = 5;
+        for (int i = 0; i < maxScrolls; i++) {
+            scroller.evaluate("el => el.scrollBy(0, el.offsetHeight)");
+            page.waitForTimeout(500);
+        }
+
+        Locator options = scroller.locator("div[role='option'], div[class*='dmqHEX']");
+        int count = options.count();
+        for (int i = 0; i < count; i++) {
+            Locator item = options.nth(i);
+            String text = item.innerText().trim();
+            if (text.equalsIgnoreCase(jobFunction)) {
+                item.scrollIntoViewIfNeeded();
+                page.waitForTimeout(300);
+                item.click();
+                System.out.println("Job function selected: " + text);
+                return;
+            }
+        }
 
     }
+
 
     private void scrollToBottom(Page page) {
         page.waitForSelector("div[data-testid='job-list-item']");

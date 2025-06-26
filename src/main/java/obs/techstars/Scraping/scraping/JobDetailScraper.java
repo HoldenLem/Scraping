@@ -24,9 +24,13 @@ public class JobDetailScraper {
         String jobFunction = "";
         String location = "";
         if (count >= 2) {
+
             jobFunction = locationDivs.nth(1).innerText();
             location = locationDivs.nth(2).innerText();
-
+            if (location.toLowerCase().startsWith("contact")) {
+                log.warn("Location looks like contact info, skipping it.");
+                location = "Unknown";
+            }
             log.info("Job Function: {}", jobFunction);
             log.info("Location:  {}", location);
         }
@@ -39,12 +43,27 @@ public class JobDetailScraper {
         data.put("posted_date", date);
 
         Locator jobDescriptionDiv = jobPage.locator("div#job-description");
-        if (jobDescriptionDiv.count() == 0) {
-            jobDescriptionDiv = jobPage.locator("div[data-testid='careerPage']");
+        Locator careerPageDiv = jobPage.locator("div[data-testid='careerPage']");
+        Locator fallbackParagraph = jobPage.locator("div[data-testid='paragraph-decorator']").first();
+
+        String jobDescription = null;
+
+        if (jobDescriptionDiv.count() > 0) {
+            jobDescription = jobDescriptionDiv.innerText().trim();
+            log.info("Found job-description, length: {}", jobDescription.length());
+        } else if (careerPageDiv.count() > 0) {
+            jobDescription = careerPageDiv.innerText().trim();
+            log.info("Found careerPage fallback, length: {}", jobDescription.length());
+        } else if (fallbackParagraph.count() > 0) {
+            jobDescription = fallbackParagraph.innerText().trim();
+            log.info("Used first paragraph fallback, length: {}", jobDescription.length());
+        } else {
+            jobDescription = "N/A";
+            log.warn("No description found at any level");
         }
-        String jobDescription = jobDescriptionDiv.innerHTML();
-        log.info("Job description length: {}", jobDescription.length());
+
         data.put("description", jobDescription);
+
         return data;
     }
 }
